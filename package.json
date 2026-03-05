@@ -1,0 +1,37 @@
+{
+  "name": "excalicli",
+  "version": "0.1.0",
+  "module": "src/cli.ts",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "excalicli": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && bun test",
+    "build": "bun run typecheck && bun build --compile src/cli.ts --outfile excalicli"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/jsdom": "^28.0.0",
+    "@types/pako": "^2.0.4"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@resvg/resvg-js": "^2.6.2",
+    "commander": "^14.0.3",
+    "effect": "^3.19.19",
+    "jsdom": "^28.1.0",
+    "pako": "^2.1.0",
+    "png-chunk-text": "^1.0.0",
+    "png-chunks-extract": "^1.0.0",
+    "zod": "^4.3.6"
+  }
+}

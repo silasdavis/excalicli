@@ -1,0 +1,32 @@
+Third-Party Notices
+====================
+
+The compiled excalicli binary (produced by `bun build --compile`) statically
+links the Bun runtime, which includes JavaScriptCore from WebKit. Users may
+rebuild the binary from source using any compatible version of Bun to satisfy
+LGPL relinking requirements.
+
+Bun — https://bun.sh
+  License: MIT (Bun code) + LGPL-2.1 (JavaScriptCore/WebKit)
+  https://github.com/oven-sh/bun/blob/main/LICENSE.md
+  https://webkit.org/licensing-webkit/
+
+The following npm dependencies are bundled into the compiled binary:
+
+commander — https://github.com/tj/commander.js
+  License: MIT
+
+effect — https://github.com/Effect-TS/effect
+  License: MIT
+
+pako — https://github.com/nodeca/pako
+  License: MIT AND Zlib
+
+png-chunk-text — https://github.com/hughsk/png-chunk-text
+  License: MIT
+
+png-chunks-extract — https://github.com/hughsk/png-chunks-extract
+  License: MIT
+
+crc-32 — https://github.com/SheetJS/js-crc32
+  License: Apache-2.0

@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh search issues:*)",
+      "Bash(gh search:*)",
+      "Bash(git -C /tmp/excalidraw log --oneline --format=\"%h %ad %s\" --date=short -- \"packages/element/src/types.ts\")",
+      "Bash(bun:*)",
+      "Bash(npx tsc:*)",
+      "Bash(./excalicli:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:bun.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:docs.excalidraw.com)",
+      "WebFetch(domain:developer.massive.wiki)",
+      "WebFetch(domain:gist.github.com)",
+      "Bash(grep:*)",
+      "Bash(npm view:*)",
+      "Bash(node:*)",
+      "Bash(ls:*)",
+      "Bash(sync)",
+      "Bash(python3:*)",
+      "Bash(# Now read it back via the binary to confirm round-trip printf ''{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"id\"\":1,\"\"method\"\":\"\"initialize\"\",\"\"params\"\":{\"\"protocolVersion\"\":\"\"2024-11-05\"\",\"\"capabilities\"\":{},\"\"clientInfo\"\":{\"\"name\"\":\"\"test\"\",\"\"version\"\":\"\"0.1.0\"\"}}}\\\\n{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"method\"\":\"\"notifications/initialized\"\"}\\\\n{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"id\"\":2,\"\"method\"\":\"\"tools/call\"\",\"\"params\"\":{\"\"name\"\":\"\"excalidraw_read\"\",\"\"arguments\"\":{\"\"path\"\":\"\"/tmp/mcp-binary-test.png\"\"}}}\\\\n'' | timeout 10 ./excalicli mcp)",
+      "Bash(# Read back via binary MCP - simpler parsing printf ''{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"id\"\":1,\"\"method\"\":\"\"initialize\"\",\"\"params\"\":{\"\"protocolVersion\"\":\"\"2024-11-05\"\",\"\"capabilities\"\":{},\"\"clientInfo\"\":{\"\"name\"\":\"\"test\"\",\"\"version\"\":\"\"0.1.0\"\"}}}\\\\n{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"method\"\":\"\"notifications/initialized\"\"}\\\\n{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"id\"\":2,\"\"method\"\":\"\"tools/call\"\",\"\"params\"\":{\"\"name\"\":\"\"excalidraw_read\"\",\"\"arguments\"\":{\"\"path\"\":\"\"/tmp/mcp-binary-test.png\"\"}}}\\\\n'' | timeout 10 ./excalicli mcp)",
+      "Bash(# Final verification: MCP initialize + tools/list from rebuilt binary echo ''{\"\"jsonrpc\"\":\"\"2.0\"\",\"\"id\"\":1,\"\"method\"\":\"\"initialize\"\",\"\"params\"\":{\"\"protocolVersion\"\":\"\"2024-11-05\"\",\"\"capabilities\"\":{},\"\"clientInfo\"\":{\"\"name\"\":\"\"test\"\",\"\"version\"\":\"\"0.1.0\"\"}}}'' | timeout 5 ./excalicli mcp)",
+      "Bash(tsc:*)"
+    ]
+  }
+}
