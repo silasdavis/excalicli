@@ -8,11 +8,87 @@
  */
 
 import { Effect } from "effect";
+import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
+import { tmpdir } from "node:os";
 import { RenderError } from "./errors.ts";
 
 // Lazy-initialized excalidraw exportToSvg function
 let _exportToSvg: typeof import("@excalidraw/excalidraw").exportToSvg | null =
   null;
+
+// Cached TTF font file paths for resvg (converted from WOFF2)
+let _fontFilesPromise: Promise<string[]> | null = null;
+
+/**
+ * Discover excalidraw's bundled WOFF2 fonts, decompress them to TTF
+ * (since resvg-js cannot load WOFF2), and cache the results.
+ *
+ * TTF files are written to a temp directory and reused across renders.
+ * Returns an empty array if fonts can't be found (graceful fallback).
+ */
+async function discoverExcalidrawFonts(): Promise<string[]> {
+  if (_fontFilesPromise !== null) return _fontFilesPromise;
+
+  _fontFilesPromise = (async () => {
+    try {
+      // Find the excalidraw package root via require.resolve
+      const excalidrawEntry = require.resolve("@excalidraw/excalidraw");
+      let pkgDir = dirname(excalidrawEntry);
+      while (pkgDir !== "/" && !existsSync(join(pkgDir, "package.json"))) {
+        pkgDir = dirname(pkgDir);
+      }
+
+      const fontsDir = join(pkgDir, "dist", "prod", "fonts");
+      if (!existsSync(fontsDir)) return [];
+
+      // Collect all .woff2 files recursively from font subdirectories
+      const woff2Paths: string[] = [];
+      const subdirs = readdirSync(fontsDir, { withFileTypes: true });
+      for (const subdir of subdirs) {
+        if (!subdir.isDirectory()) continue;
+        const subPath = join(fontsDir, subdir.name);
+        const files = readdirSync(subPath);
+        for (const file of files) {
+          if (file.endsWith(".woff2")) {
+            woff2Paths.push(join(subPath, file));
+          }
+        }
+      }
+
+      if (woff2Paths.length === 0) return [];
+
+      // Decompress WOFF2 → TTF into a temp directory
+      const ttfDir = join(tmpdir(), "excalicli-fonts");
+      mkdirSync(ttfDir, { recursive: true });
+
+      const { decompress } = await import("wawoff2");
+      const ttfPaths: string[] = [];
+
+      for (const woff2Path of woff2Paths) {
+        const ttfName = basename(woff2Path).replace(/\.woff2$/, ".ttf");
+        const ttfPath = join(ttfDir, ttfName);
+
+        // Skip if already converted
+        if (existsSync(ttfPath)) {
+          ttfPaths.push(ttfPath);
+          continue;
+        }
+
+        const woff2Data = readFileSync(woff2Path);
+        const ttfData = await decompress(woff2Data);
+        writeFileSync(ttfPath, Buffer.from(ttfData));
+        ttfPaths.push(ttfPath);
+      }
+
+      return ttfPaths;
+    } catch {
+      return [];
+    }
+  })();
+
+  return _fontFilesPromise;
+}
 
 /**
  * Set up jsdom globals required by @excalidraw/excalidraw.
@@ -294,10 +370,24 @@ export const renderToPng = (
         }),
     });
 
+    const fontFiles = yield* Effect.tryPromise({
+      try: () => discoverExcalidrawFonts(),
+      catch: (e) =>
+        new RenderError({
+          message: "Failed to discover excalidraw fonts",
+          cause: e,
+        }),
+    });
+
     const pngBuffer = yield* Effect.try({
       try: () => {
         const resvg = new Resvg(svgString, {
-          fitTo: { mode: "original" as const },
+          fitTo: { mode: "zoom" as const, value: 2 },
+          font: {
+            fontFiles,
+            loadSystemFonts: true,
+            defaultFontFamily: "Virgil",
+          },
         });
         const rendered = resvg.render();
         return new Uint8Array(rendered.asPng());

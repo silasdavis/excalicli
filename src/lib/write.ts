@@ -14,6 +14,7 @@ import { detectFormat } from "./scene.ts";
 import { embedSceneInPng } from "./png.ts";
 import { embedSceneInSvg } from "./svg.ts";
 import { renderToPng, renderToSvg } from "./render.ts";
+import { normalizeScene } from "./normalize.ts";
 import type {
   DecodeError,
   EncodeError,
@@ -26,6 +27,15 @@ import {
   FileReadError as FileReadErrorClass,
   FileWriteError as FileWriteErrorClass,
 } from "./errors.ts";
+
+/**
+ * Parse scene JSON, apply normalization (smart defaults), and re-serialize.
+ */
+function normalizeSceneJson(sceneJson: string): string {
+  const scene = JSON.parse(sceneJson);
+  const normalized = normalizeScene(scene);
+  return JSON.stringify(normalized);
+}
 
 /**
  * Write a scene to a file, rendering and embedding as appropriate for the format.
@@ -42,19 +52,20 @@ export const writeSceneToFile = (
 > =>
   Effect.gen(function* () {
     const format = yield* detectFormat(filePath);
+    const normalized = normalizeSceneJson(sceneJson);
 
     switch (format) {
       case "excalidraw": {
         yield* Effect.tryPromise({
-          try: () => Bun.write(filePath, sceneJson),
+          try: () => Bun.write(filePath, normalized),
           catch: (e) => new FileWriteErrorClass({ filePath, cause: e }),
         });
         break;
       }
 
       case "png": {
-        const pngData = yield* renderToPng(sceneJson);
-        const withScene = yield* embedSceneInPng(pngData, sceneJson);
+        const pngData = yield* renderToPng(normalized);
+        const withScene = yield* embedSceneInPng(pngData, normalized);
         yield* Effect.tryPromise({
           try: () => Bun.write(filePath, withScene),
           catch: (e) => new FileWriteErrorClass({ filePath, cause: e }),
@@ -63,8 +74,8 @@ export const writeSceneToFile = (
       }
 
       case "svg": {
-        const svgString = yield* renderToSvg(sceneJson);
-        const withScene = yield* embedSceneInSvg(svgString, sceneJson);
+        const svgString = yield* renderToSvg(normalized);
+        const withScene = yield* embedSceneInSvg(svgString, normalized);
         yield* Effect.tryPromise({
           try: () => Bun.write(filePath, withScene),
           catch: (e) => new FileWriteErrorClass({ filePath, cause: e }),

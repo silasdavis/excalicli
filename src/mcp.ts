@@ -80,10 +80,10 @@ export async function startMcpServer(): Promise<void> {
 
   server.tool(
     "excalidraw_write",
-    "Write excalidraw scene JSON to a file. For PNG/SVG, renders the scene to pixels and embeds the scene data so the file can be reopened in excalidraw. For .excalidraw/.json, writes the JSON directly.",
+    "Write excalidraw scene JSON to a file. For PNG/SVG, renders the scene and embeds the scene data so the file can be reopened in excalidraw. For .excalidraw/.json, writes the JSON directly. Elements support smart defaults — only type, x, y, and type-specific fields (text/fontSize, width/height, or points) are required. Missing boilerplate (id, seed, strokeColor, roughness, etc.) is auto-filled. Scene-level fields (type, version, appState, files) also have defaults.",
     {
       path: z.string().describe("Output file path (.png, .svg, .excalidraw, or .json)"),
-      scene: z.string().describe("The full excalidraw scene JSON string"),
+      scene: z.string().describe("The full excalidraw scene JSON string. Elements need only essential fields — text: {type, x, y, text, fontSize}, rectangle/ellipse: {type, x, y, width, height}, line/arrow: {type, x, y, points}. Optional overrides: strokeColor, backgroundColor, strokeWidth, strokeStyle, fontFamily, textAlign, opacity, roughness, groupIds."),
     },
     async ({ path, scene }) => {
       const result = await Effect.runPromiseExit(writeSceneToFile(path, scene));
