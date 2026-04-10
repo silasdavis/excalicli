@@ -8,7 +8,7 @@ CLI tool for working with [Excalidraw](https://excalidraw.com) files. Extract, r
 - **Write** scene JSON to rendered PNG/SVG with embedded scene data
 - **Convert** between formats (.excalidraw, .png, .svg)
 - **Info** — inspect scene metadata (element counts, dimensions, etc.)
-- **MCP server** for AI-assisted editing with Claude Code
+- **MCP server** for AI-assisted editing with Claude Code, Codex, and other MCP clients
 - Full round-trip: extract scene → edit JSON → re-render with updated pixels
 
 ## Installation
@@ -25,6 +25,36 @@ Requires [Bun](https://bun.sh) v1.3.9+.
 bun install
 bun run build
 ```
+
+### Home Manager
+
+This flake exports `homeManagerModules.default`. The module installs `excalicli`,
+registers it as `programs.mcp.servers.excalicli`, and enables shared MCP
+integration for Claude Code and Codex by default when those programs are enabled.
+
+```nix
+{
+  inputs.excalicli.url = "github:silasdavis/excalicli";
+
+  outputs = { nixpkgs, home-manager, excalicli, ... }: {
+    homeConfigurations.me = home-manager.lib.homeManagerConfiguration {
+      pkgs = import nixpkgs { system = "x86_64-linux"; };
+      modules = [
+        excalicli.homeManagerModules.default
+        {
+          programs.excalicli.enable = true;
+
+          programs.claude-code.enable = true;
+          programs.codex.enable = true;
+        }
+      ];
+    };
+  };
+}
+```
+
+Override `programs.excalicli.package` if you want to use a custom build or a
+package for a platform not provided by this flake.
 
 ## Usage
 
@@ -81,10 +111,15 @@ Background: #ffffff
 
 ### MCP server (AI integration)
 
-Register excalicli as an MCP server so Claude Code can read, edit, and render excalidraw files directly:
+With Home Manager, no manual setup is required. Enabling
+`programs.excalicli.enable = true` registers the MCP server declaratively via
+`programs.mcp`, and Claude Code / Codex pick it up automatically when their
+Home Manager modules are enabled.
+
+Without Home Manager, you can still register `excalicli` manually:
 
 ```bash
-# Automatic setup (recommended)
+# Automatic Claude Code setup
 excalicli setup
 
 # Or manual registration:
@@ -94,7 +129,8 @@ claude mcp add excalicli -- /path/to/excalicli mcp
 claude mcp add excalicli -- bun /path/to/excalicli/src/cli.ts mcp
 ```
 
-The `setup` command auto-detects the binary path and registers it with Claude Code. Use `--scope user` to register globally instead of per-project.
+The `setup` command auto-detects the binary path and registers it with Claude
+Code. Use `--scope user` to register globally instead of per-project.
 
 **Available MCP tools:**
 
@@ -104,7 +140,9 @@ The `setup` command auto-detects the binary path and registers it with Claude Co
 | `excalidraw_write` | Render scene JSON to PNG/SVG with embedded data |
 | `excalidraw_info` | Show scene metadata (element counts, dimensions, etc.) |
 
-**Workflow**: Claude can read an existing diagram, modify the scene JSON (add/remove/edit elements), and write it back — producing an updated image with both rendered pixels and embedded scene data for future editing.
+**Workflow**: An MCP client can read an existing diagram, modify the scene JSON
+(add/remove/edit elements), and write it back — producing an updated image with
+both rendered pixels and embedded scene data for future editing.
 
 ## Supported formats
 

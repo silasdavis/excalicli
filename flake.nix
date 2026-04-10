@@ -29,6 +29,8 @@
         };
       });
 
+      homeManagerModules.default = import ./modules/home-manager.nix { inherit self; };
+
       overlays.default = final: prev: {
         excalicli = self.packages.${final.stdenv.hostPlatform.system}.default;
       };
