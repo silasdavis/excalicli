@@ -57,10 +57,15 @@ export async function startMcpServer(): Promise<void> {
     version: "0.1.0",
   });
 
-  server.tool(
+  server.registerTool(
     "excalidraw_read",
-    "Extract excalidraw scene JSON from a PNG, SVG, or .excalidraw file. Returns the full scene JSON that can be edited and written back.",
-    { path: z.string().describe("Path to the file to read (.png, .svg, .excalidraw, or .json)") },
+    {
+      description:
+        "Extract excalidraw scene JSON from a PNG, SVG, or .excalidraw file. Returns the full scene JSON that can be edited and written back.",
+      inputSchema: {
+        path: z.string().describe("Path to the file to read (.png, .svg, .excalidraw, or .json)"),
+      },
+    },
     async ({ path }) => {
       const result = await Effect.runPromiseExit(loadSceneJson(path));
       if (result._tag === "Failure") {
@@ -78,12 +83,15 @@ export async function startMcpServer(): Promise<void> {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "excalidraw_write",
-    "Write excalidraw scene JSON to a file. For PNG/SVG, renders the scene and embeds the scene data so the file can be reopened in excalidraw. For .excalidraw/.json, writes the JSON directly. Elements support smart defaults — only type, x, y, and type-specific fields (text/fontSize, width/height, or points) are required. Missing boilerplate (id, seed, strokeColor, roughness, etc.) is auto-filled. Scene-level fields (type, version, appState, files) also have defaults.",
     {
-      path: z.string().describe("Output file path (.png, .svg, .excalidraw, or .json)"),
-      scene: z.string().describe("The full excalidraw scene JSON string. Elements need only essential fields — text: {type, x, y, text, fontSize}, rectangle/ellipse: {type, x, y, width, height}, line/arrow: {type, x, y, points}. Optional overrides: strokeColor, backgroundColor, strokeWidth, strokeStyle, fontFamily, textAlign, opacity, roughness, groupIds."),
+      description:
+        "Write excalidraw scene JSON to a file. For PNG/SVG, renders the scene and embeds the scene data so the file can be reopened in excalidraw. For .excalidraw/.json, writes the JSON directly. Elements support smart defaults — only type, x, y, and type-specific fields (text/fontSize, width/height, or points) are required. Missing boilerplate (id, seed, strokeColor, roughness, etc.) is auto-filled. Scene-level fields (type, version, appState, files) also have defaults.",
+      inputSchema: {
+        path: z.string().describe("Output file path (.png, .svg, .excalidraw, or .json)"),
+        scene: z.string().describe("The full excalidraw scene JSON string. Elements need only essential fields — text: {type, x, y, text, fontSize}, rectangle/ellipse: {type, x, y, width, height}, line/arrow: {type, x, y, points}. Optional overrides: strokeColor, backgroundColor, strokeWidth, strokeStyle, fontFamily, textAlign, opacity, roughness, groupIds."),
+      },
     },
     async ({ path, scene }) => {
       const result = await Effect.runPromiseExit(writeSceneToFile(path, scene));
@@ -100,10 +108,15 @@ export async function startMcpServer(): Promise<void> {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "excalidraw_info",
-    "Show metadata about an excalidraw file: element counts by type, dimensions, background color, etc.",
-    { path: z.string().describe("Path to the file to inspect (.png, .svg, .excalidraw, or .json)") },
+    {
+      description:
+        "Show metadata about an excalidraw file: element counts by type, dimensions, background color, etc.",
+      inputSchema: {
+        path: z.string().describe("Path to the file to inspect (.png, .svg, .excalidraw, or .json)"),
+      },
+    },
     async ({ path }) => {
       const result = await Effect.runPromiseExit(loadScene(path));
       if (result._tag === "Failure") {
