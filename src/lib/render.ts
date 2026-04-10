@@ -12,13 +12,159 @@ import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync } from 
 import { join, dirname, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { RenderError } from "./errors.ts";
+import jsdomDefaultStylesheet from "../../node_modules/jsdom/lib/jsdom/browser/default-stylesheet.css" with { type: "text" };
 
 // Lazy-initialized excalidraw exportToSvg function
 let _exportToSvg: typeof import("@excalidraw/excalidraw").exportToSvg | null =
   null;
 
+// Tracks whether we've already installed the jsdom-backed globals.
+let _domEnvironmentReady = false;
+
 // Cached TTF font file paths for resvg (converted from WOFF2)
 let _fontFilesPromise: Promise<string[]> | null = null;
+
+function formatCause(cause: unknown): string {
+  if (cause instanceof Error) return cause.message;
+  return String(cause);
+}
+
+let _jsdomSyncXhrWorkerPath: string | null = null;
+
+const JSDOM_SYNC_XHR_WORKER_STUB = `"use strict";
+const { parentPort } = require("node:worker_threads");
+
+parentPort.on("message", ({ sharedBuffer, responsePort }) => {
+  const int32 = new Int32Array(sharedBuffer);
+  responsePort.postMessage({
+    status: 0,
+    statusText: "",
+    responseURL: "",
+    responseBytes: null,
+    totalReceivedChunkSize: 0,
+    responseHeaders: [],
+    filteredResponseHeaders: [],
+    error: "Synchronous XHR is unavailable in the compiled excalicli jsdom worker stub.",
+    uploadComplete: true,
+    cookieJar: null,
+  });
+  Atomics.store(int32, 0, 1);
+  Atomics.notify(int32, 0);
+});
+`;
+
+function ensureJsdomSyncXhrWorkerStub(): string {
+  if (_jsdomSyncXhrWorkerPath) return _jsdomSyncXhrWorkerPath;
+
+  const workerDir = join(tmpdir(), "excalicli-jsdom");
+  mkdirSync(workerDir, { recursive: true });
+
+  const workerPath = join(workerDir, "xhr-sync-worker.js");
+  if (!existsSync(workerPath)) {
+    writeFileSync(workerPath, JSDOM_SYNC_XHR_WORKER_STUB);
+  }
+
+  _jsdomSyncXhrWorkerPath = workerPath;
+  return workerPath;
+}
+
+function patchJsdomDefaultStylesheet(): void {
+  const fs = require("node:fs") as typeof import("node:fs") & {
+    readFileSync: typeof import("node:fs").readFileSync & {
+      __excalicliJsdomPatched?: boolean;
+    };
+  };
+
+  if (fs.readFileSync.__excalicliJsdomPatched) return;
+
+  const originalReadFileSync = fs.readFileSync.bind(fs);
+  const defaultStylesheetSuffix = "/jsdom/lib/jsdom/browser/default-stylesheet.css";
+
+  const patchedReadFileSync = ((pathLike: Parameters<typeof fs.readFileSync>[0], options?: Parameters<typeof fs.readFileSync>[1]) => {
+    const pathString =
+      typeof pathLike === "string"
+        ? pathLike
+        : pathLike instanceof URL
+          ? pathLike.pathname
+          : Buffer.isBuffer(pathLike)
+            ? pathLike.toString("utf8")
+            : null;
+
+    if (
+      pathString &&
+      pathString.endsWith(defaultStylesheetSuffix) &&
+      !existsSync(pathString)
+    ) {
+      const encoding =
+        typeof options === "string"
+          ? options
+          : typeof options === "object" && options !== null
+            ? options.encoding
+            : undefined;
+
+      if (encoding === "utf8" || encoding === "utf-8") {
+        return jsdomDefaultStylesheet;
+      }
+
+      return Buffer.from(jsdomDefaultStylesheet, "utf8");
+    }
+
+    return originalReadFileSync(pathLike, options as never);
+  }) as typeof fs.readFileSync;
+
+  patchedReadFileSync.__excalicliJsdomPatched = true;
+  fs.readFileSync = patchedReadFileSync;
+}
+
+function patchJsdomSyncXhrWorker(): void {
+  const workerPath = ensureJsdomSyncXhrWorkerStub();
+  const isJsdomSyncWorkerRequest = (request: string) =>
+    request === "./xhr-sync-worker.js" ||
+    request.replaceAll("\\", "/").endsWith("/jsdom/lib/jsdom/living/xhr/xhr-sync-worker.js");
+
+  const runtimeRequire = require as typeof require & {
+    resolve?: ((request: string, options?: unknown) => string) & {
+      __excalicliJsdomPatched?: boolean;
+    };
+  };
+
+  if (runtimeRequire.resolve && !runtimeRequire.resolve.__excalicliJsdomPatched) {
+    const originalResolve = runtimeRequire.resolve.bind(runtimeRequire);
+    const patchedResolve = ((request: string, options?: unknown) => {
+      if (isJsdomSyncWorkerRequest(request)) {
+        return workerPath;
+      }
+
+      return originalResolve(request, options);
+    }) as typeof runtimeRequire.resolve;
+
+    patchedResolve.__excalicliJsdomPatched = true;
+    runtimeRequire.resolve = patchedResolve;
+  }
+
+  const moduleExports = require("node:module") as {
+    _resolveFilename?: ((request: string, parent: unknown, ...rest: unknown[]) => string) & {
+      __excalicliJsdomPatched?: boolean;
+    };
+  };
+
+  if (!moduleExports._resolveFilename || moduleExports._resolveFilename.__excalicliJsdomPatched) {
+    return;
+  }
+
+  const originalResolveFilename = moduleExports._resolveFilename;
+
+  const patchedResolveFilename = ((request: string, parent: unknown, ...rest: unknown[]) => {
+    if (isJsdomSyncWorkerRequest(request)) {
+      return workerPath;
+    }
+
+    return originalResolveFilename.call(moduleExports, request, parent, ...rest);
+  }) as typeof originalResolveFilename;
+
+  patchedResolveFilename.__excalicliJsdomPatched = true;
+  moduleExports._resolveFilename = patchedResolveFilename;
+}
 
 /**
  * Discover excalidraw's bundled WOFF2 fonts, decompress them to TTF
@@ -94,9 +240,39 @@ async function discoverExcalidrawFonts(): Promise<string[]> {
  * Set up jsdom globals required by @excalidraw/excalidraw.
  * Must be called before the first import of excalidraw.
  */
+function installGlobal(name: keyof typeof globalThis, value: unknown): void {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+
+  if (!descriptor) {
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value,
+    });
+    return;
+  }
+
+  if (descriptor.writable || descriptor.set) {
+    Reflect.set(globalThis as Record<string, unknown>, name as string, value);
+    return;
+  }
+
+  if (descriptor.configurable) {
+    Object.defineProperty(globalThis, name, {
+      configurable: true,
+      enumerable: descriptor.enumerable ?? true,
+      writable: true,
+      value,
+    });
+  }
+}
+
 function setupDomEnvironment(): void {
-  // Already set up?
-  if (globalThis.window !== undefined) return;
+  if (_domEnvironmentReady) return;
+
+  patchJsdomDefaultStylesheet();
+  patchJsdomSyncXhrWorker();
 
   // Dynamic require to avoid loading jsdom when not rendering
   const { JSDOM } = require("jsdom");
@@ -107,7 +283,10 @@ function setupDomEnvironment(): void {
   });
   const win = dom.window;
 
-  Object.assign(globalThis, {
+  // Bun can expose readonly browser globals (notably navigator). Install
+  // our jsdom-backed globals one-by-one so readonly descriptors don't abort
+  // the whole bootstrap.
+  const globalBindings = {
     window: win,
     document: win.document,
     navigator: win.navigator,
@@ -159,7 +338,11 @@ function setupDomEnvironment(): void {
         return this.loaded;
       }
     },
-  });
+  } satisfies Partial<Record<keyof typeof globalThis, unknown>>;
+
+  for (const [name, value] of Object.entries(globalBindings)) {
+    installGlobal(name as keyof typeof globalThis, value);
+  }
 
   // Stub Canvas2D context for excalidraw's feature detection and text measurement
   const canvasProto = win.HTMLCanvasElement.prototype as any;
@@ -261,6 +444,8 @@ function setupDomEnvironment(): void {
       size: 0,
     };
   }
+
+  _domEnvironmentReady = true;
 }
 
 /**
@@ -278,7 +463,7 @@ const getExportToSvg = (): Effect.Effect<
       try: () => setupDomEnvironment(),
       catch: (e) =>
         new RenderError({
-          message: "Failed to set up DOM environment for rendering",
+          message: `Failed to set up DOM environment for rendering: ${formatCause(e)}`,
           cause: e,
         }),
     });

@@ -116,6 +116,40 @@ test("renderToPng produces valid PNG", async () => {
   expect(png.length).toBeGreaterThan(1000);
 });
 
+test("renderToSvg tolerates readonly runtime globals", async () => {
+  const script = `
+    Object.defineProperty(globalThis, "navigator", {
+      value: { userAgent: "bun" },
+      writable: false,
+      configurable: true,
+    });
+    const { Effect } = await import("effect");
+    const { renderToSvg } = await import("./src/lib/render.ts");
+    const scene = ${JSON.stringify(TEST_SCENE)};
+    const svg = await Effect.runPromise(renderToSvg(scene));
+    if (!svg.includes("<svg")) {
+      throw new Error("missing svg output");
+    }
+    console.log("ok");
+  `;
+
+  const proc = Bun.spawn(["bun", "-e", script], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  expect(exitCode).toBe(0);
+  expect(stdout).toContain("ok");
+  expect(stderr).not.toContain("Failed to set up DOM environment for rendering");
+});
+
 test("render PNG → embed scene → extract scene round-trip", async () => {
   const png = await Effect.runPromise(renderToPng(TEST_SCENE));
   const withScene = await Effect.runPromise(embedSceneInPng(png, TEST_SCENE));
